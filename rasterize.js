@@ -7,8 +7,8 @@ const WIN_BOTTOM = 0; const WIN_TOP = 1;  // default top and bottom y coords in 
 //const INPUT_TRIANGLES_URL = "https://ncsucgclass.github.io/prog2/triangles.json"; // triangles file loc
 //const INPUT_SPHERES_URL = "https://ncsucgclass.github.io/prog2/ellipsoids.json"; // ellipsoids file loc
 
-const INPUT_ELLIPSOIDS_URL = "http://demo8647310.mockable.io/"
-const INPUT_TRIANGLES_URL  ="http://demo2448912.mockable.io"
+const INPUT_ELLIPSOIDS_URL = "https://demo8647310.mockable.io/"
+const INPUT_TRIANGLES_URL  ="https://demo2448912.mockable.io"
 var Eye = new vec4.fromValues(0.5,0.5,-0.5,1.0); // default eye position in world space
 
 /* webgl globals */
