@@ -13,11 +13,15 @@ var Eye = new vec4.fromValues(0.5,0.5,-0.5,1.0); // default eye position in worl
 
 /* webgl globals */
 var gl = null; // the all powerful gl object. It's all here folks!
+
 var vertexBuffer; // this contains vertex coordinates in triples
 var triangleBuffer; // this contains indices into vertexBuffer in triples
+var colorBuffer;
+
+ // color buffer contains r g b a for each fragments
 var triBufferSize = 0; // the number of indices in the triangle buffer
 var vertexPositionAttrib; // where to put position for vertex shader
-
+var vertexColorAttrib;
 
 
 // ASSIGNMENT HELPER FUNCTIONS
@@ -75,6 +79,11 @@ function setupWebGL() {
 } // end setupWebGL
 
 
+
+
+
+
+
 function loadShapes(desc = ""){
         var inputEllipsoids = getJSONFile(INPUT_ELLIPSOIDS_URL,"ellipsoids");
         var inputTriangles = getJSONFile(INPUT_TRIANGLES_URL,"triangles");
@@ -87,6 +96,9 @@ function loadShapes(desc = ""){
         var whichSetTri; // index of triangle in current triangle set
         var coordArray = []; // 1D array of vertex coords for WebGL
         var indexArray = []; // 1D array of vertex indices for WebGL
+        var colorArray = [];
+
+
         var vtxBufferSize = 0; // the number of vertices in the vertex buffer
         var vtxToAdd = []; // vtx coords to add to the coord array
         var indexOffset = vec3.create(); // the index offset for the current set
@@ -168,8 +180,13 @@ function loadShapes(desc = ""){
             for (whichSetVert=0; whichSetVert < currentEllipsoid.vertices.length; whichSetVert++) {
                 vtxToAdd = currentEllipsoid.vertices[whichSetVert];
                 coordArray.push(vtxToAdd[0],vtxToAdd[1],vtxToAdd[2]);
+                var diffuse_color = currentEllipsoid.diffuse;
+                colorArray.push(diffuse_color[0],diffuse_color[1],diffuse_color[2],1)
             } // end for vertices in set
-            
+               
+               console.log("no of triangle vertex  groups : "+coordArray.length / 3) 
+               console.log("no of colors : "+colorArray.length / 4)
+                
             // set up the triangle index array, adjusting indices across sets
             for (whichSetTri=0; whichSetTri < currentEllipsoid.triangles.length; whichSetTri++) {
                 vec3.add(triToAdd,indexOffset,currentEllipsoid.triangles[whichSetTri]);
@@ -202,6 +219,8 @@ function loadShapes(desc = ""){
             for (whichSetVert=0; whichSetVert < currentTriangle.vertices.length; whichSetVert++) {
                 vtxToAdd = currentTriangle.vertices[whichSetVert];
                 coordArray.push(vtxToAdd[0],vtxToAdd[1],vtxToAdd[2]);
+                var diffuse_color_tri = currentTriangle.material.diffuse;
+                colorArray.push(diffuse_color_tri[0],diffuse_color_tri[1],diffuse_color_tri[2],1)
             } // end for vertices in set
             
             // set up the triangle index array, adjusting indices across sets
@@ -227,6 +246,14 @@ function loadShapes(desc = ""){
         gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffer); // activate that buffer
         gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(coordArray),gl.STATIC_DRAW); // coords to that buffer
         
+       
+        //setting the color of the shapes
+        colorBuffer = gl.createBuffer(); // init empty vertex coord buffer
+        gl.bindBuffer(gl.ARRAY_BUFFER,colorBuffer); // activate that buffer
+        gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(colorArray),gl.STATIC_DRAW); // coords to that buffer
+        colorBuffer.itemSize = 4;
+        colorBuffer.numSize = colorArray.length / colorBuffer.itemSize ;
+      
         // send the triangle indices to webGL
         triangleBuffer = gl.createBuffer(); // init empty triangle index buffer
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, triangleBuffer); // activate that buffer
@@ -238,14 +265,23 @@ function loadShapes(desc = ""){
 
 }
 
+function getColor()
+{
+
+
+}
 
 // setup the webGL shaders
 function setupShaders() {
     
     // define fragment shader in essl using es6 template strings
     var fShaderCode = `
+        precision mediump float;
+       
+        varying vec4 vColor ;
+
         void main(void) {
-            gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0); // all fragments are white
+            gl_FragColor = vColor; // all fragments are white
         }
     `;
     
@@ -253,10 +289,13 @@ function setupShaders() {
     var vShaderCode = `
         attribute vec3 vertexPosition;
         
+         attribute vec4 aVertexColor;
+
+           varying vec4 vColor;
 
         void main(void) {
             gl_Position = vec4(vertexPosition.xyz,1.0) ; // use the untransformed position
-           // gl_Position = vertexPosition;
+            vColor = aVertexColor;
         }
     `;
     
@@ -290,10 +329,17 @@ function setupShaders() {
             if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) { // bad program link
                 throw "error during shader program linking: " + gl.getProgramInfoLog(shaderProgram);
             } else { // no shader program link errors
+               
                 gl.useProgram(shaderProgram); // activate shader program (frag and vert)
-                vertexPositionAttrib = // get pointer to vertex shader input
-                    gl.getAttribLocation(shaderProgram, "vertexPosition"); 
-                gl.enableVertexAttribArray(vertexPositionAttrib); // input to shader from array
+               
+                vertexPositionAttrib = gl.getAttribLocation(shaderProgram, "vertexPosition"); // get pointer to vertex shader input
+                gl.enableVertexAttribArray(vertexPositionAttrib); 
+
+                vertexColorAttrib = gl.getAttribLocation(shaderProgram, "aVertexColor"); // get pointer to vertex color input
+                gl.enableVertexAttribArray(vertexColorAttrib); 
+
+
+                // input to shader from array
             } // end if no shader program link errors
         } // end if no compile errors
     } // end try 
@@ -313,6 +359,11 @@ function renderTriangles() {
     gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffer); // activate
     gl.vertexAttribPointer(vertexPositionAttrib,3,gl.FLOAT,false,0,0); // feed
 
+    //vertex color buffer : activate and feed into color shader
+    gl.bindBuffer(gl.ARRAY_BUFFER,colorBuffer); // activate
+    gl.vertexAttribPointer(vertexColorAttrib,4,gl.FLOAT,false,0,0); // feed
+
+
     // triangle buffer: activate and render
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,triangleBuffer); // activate
 
@@ -329,7 +380,7 @@ function main() {
   
   setupWebGL(); // set up the webGL environment
  // loadTriangles(); // load in the triangles from tri file
-  loadShapes("ellipsoids");
+  loadShapes("");
   setupShaders(); // setup the webGL shaders
   renderTriangles(); // draw the triangles using webGL
   
