@@ -23,6 +23,7 @@ var colorBuffer_s;
 var normalBuffer;
 
 
+
  // color buffer contains r g b a for each fragments
 var triBufferSize = 0; // the number of indices in the triangle buffer
 var vertexPositionAttrib; // where to put position for vertex shader
@@ -32,6 +33,9 @@ var vertexColorAttrib_d;
 var vertexColorAttrib_s;
 
 var vertexNormalAttrib;
+
+var specularIndex;
+
 
 // ASSIGNMENT HELPER FUNCTIONS
 
@@ -136,6 +140,8 @@ function loadShapes(desc = ""){
                  currentEllipsoid.vertices = [];
                  currentEllipsoid.triangles = [];
                  currentEllipsoid.normals = [];
+
+            gl.uniform1f(specularIndex, currentEllipsoid.n);
 
                 // predefined
                 var latitudeBands = 50;
@@ -255,6 +261,7 @@ function loadShapes(desc = ""){
             
             var currentTriangle = inputTriangles[whichSet];
 
+            gl.uniform1f(specularIndex, currentTriangle.n);
 
             for (var normalIndex = 0; normalIndex <  currentTriangle.normals.length ; normalIndex++) {
 
@@ -366,6 +373,8 @@ function setupShaders() {
         attribute vec4 aVertexColor_ambient;
         attribute vec4 aVertexColor_specular;
 
+        uniform float spec_value;
+
 
          vec3 lightPos = vec3(-1.0,3.0,-0.5);
          vec4 ambientColor = vec4(1.0, 1.0, 1.0, 1.0);
@@ -393,9 +402,9 @@ function setupShaders() {
             float lambertian = max(dot(lightDir,normalfPosition), 0.0); // LdoN
             float specAngle = max(dot(halfDir, normalfPosition), 0.0); // HdotN
 
-            specular = pow(specAngle, 16.0);
+            specular = pow(specAngle, spec_value);
 
-            
+
 
 
 
@@ -473,6 +482,8 @@ function setupShaders() {
                 vertexNormalAttrib = gl.getAttribLocation(shaderProgram, "normalfPosition"); // get pointer to vertex color input
                 gl.enableVertexAttribArray(vertexNormalAttrib); 
 
+                  // specular reflection
+                specularIndex = gl.getUniformLocation(shaderProgram,"spec_value")
 
                 // input to shader from array
             } // end if no shader program link errors
