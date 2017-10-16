@@ -36,6 +36,7 @@ var vertexNormalAttrib;
 
 var specularIndex;
 
+var shaderProgram ;
 
 // ASSIGNMENT HELPER FUNCTIONS
 
@@ -112,10 +113,6 @@ function loadShapes(desc = ""){
         var indexArray = []; // 1D array of vertex indices for WebGL
         var normalArray = [];
        
-        var colorArray_a = [];
-        var colorArray_d = [];
-        var colorArray_s = [];
-
 
         var vtxBufferSize = 0; // the number of vertices in the vertex buffer
 
@@ -141,7 +138,24 @@ function loadShapes(desc = ""){
                  currentEllipsoid.triangles = [];
                  currentEllipsoid.normals = [];
 
+            var diffuse_color = currentEllipsoid.diffuse;
+            var ambient_color = currentEllipsoid.ambient;
+            var specular_color = currentEllipsoid.specular;
+
+              
+
             gl.uniform1f(specularIndex, currentEllipsoid.n);
+
+
+
+            
+            console.log([ambient_color[0],ambient_color[1],ambient_color[2],1]);
+            vertexColorAttrib_a = [ambient_color[0],ambient_color[1],ambient_color[2],1] ;
+            vertexColorAttrib_d = [diffuse_color[0],diffuse_color[1],diffuse_color[2],1] ;
+            vertexColorAttrib_s = [specular_color[0],specular_color[1],specular_color[2],1] ; 
+            gl.uniform4fv(shaderProgram , vertexColorAttrib_a);
+            gl.uniform4fv(shaderProgram , vertexColorAttrib_d);
+             gl.uniform4fv(shaderProgram , vertexColorAttrib_s);
 
                 // predefined
                 var latitudeBands = 50;
@@ -213,18 +227,12 @@ function loadShapes(desc = ""){
                 vtxToAdd = currentEllipsoid.vertices[whichSetVert];
                 coordArray.push(vtxToAdd[0],vtxToAdd[1],vtxToAdd[2]);
 
-                var diffuse_color = currentEllipsoid.diffuse;
-                var ambient_color = currentEllipsoid.ambient;
-                var specular_color = currentEllipsoid.specular;
-
-                colorArray_d.push(diffuse_color[0],diffuse_color[1],diffuse_color[2],1)
-                colorArray_a.push(ambient_color[0],ambient_color[1],ambient_color[2],1)
-                colorArray_s.push(specular_color[0],specular_color[1],specular_color[2],1)
+         
                 
             } // end for vertices in set
                
                console.log("no of triangle vertex  groups : "+coordArray.length / 3) 
-               console.log("no of colors : "+colorArray_d.length / 4)
+              
                 
             // set up the triangle index array, adjusting indices across sets
             for (whichSetTri=0; whichSetTri < currentEllipsoid.triangles.length; whichSetTri++) {
@@ -242,9 +250,6 @@ function loadShapes(desc = ""){
 
 
         console.log(" vertices : " + coordArray.length / 3)
-        console.log(" ambient_color : "+ colorArray_a.length /4)
-        console.log(" diffuse_color : "+ colorArray_d.length /4)
-        console.log(" specular_color : "+ colorArray_s.length /4)
 
 
         /*******************************************************************/
@@ -261,6 +266,22 @@ function loadShapes(desc = ""){
             
             var currentTriangle = inputTriangles[whichSet];
 
+            var diffuse_color = currentTriangle.material.diffuse;
+            var ambient_color = currentTriangle.material.ambient;
+            var specular_color = currentTriangle.material.specular;
+
+  
+            console.log([ambient_color[0],ambient_color[1],ambient_color[2],1]);
+            vertexColorAttrib_a = [ambient_color[0],ambient_color[1],ambient_color[2],1] ;
+            vertexColorAttrib_d = [diffuse_color[0],diffuse_color[1],diffuse_color[2],1] ;
+            vertexColorAttrib_s = [specular_color[0],specular_color[1],specular_color[2],1] ; 
+            
+            gl.uniform4fv(shaderProgram , vertexColorAttrib_a);
+            gl.uniform4fv(shaderProgram , vertexColorAttrib_d);
+            gl.uniform4fv(shaderProgram , vertexColorAttrib_s);
+
+
+
             gl.uniform1f(specularIndex, currentTriangle.n);
 
             for (var normalIndex = 0; normalIndex <  currentTriangle.normals.length ; normalIndex++) {
@@ -274,16 +295,7 @@ function loadShapes(desc = ""){
             for (whichSetVert=0; whichSetVert < currentTriangle.vertices.length; whichSetVert++) {
                 vtxToAdd = currentTriangle.vertices[whichSetVert];
                 coordArray.push(vtxToAdd[0],vtxToAdd[1],vtxToAdd[2]);
-               
-
-                var diffuse_color = currentTriangle.material.diffuse;
-                var ambient_color = currentTriangle.material.ambient;
-                var specular_color = currentTriangle.material.specular;
-
-                colorArray_d.push(diffuse_color[0],diffuse_color[1],diffuse_color[2],1)
-                colorArray_a.push(ambient_color[0],ambient_color[1],ambient_color[2],1)
-                colorArray_s.push(specular_color[0],specular_color[1],specular_color[2],1)
-               
+                              
             } // end for vertices in set
             
             // set up the triangle index array, adjusting indices across sets
@@ -310,28 +322,6 @@ function loadShapes(desc = ""){
         gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(coordArray),gl.STATIC_DRAW); // coords to that buffer
         
        
-        //setting the color of the shapes
-        colorBuffer_a = gl.createBuffer(); // init empty vertex coord buffer
-        gl.bindBuffer(gl.ARRAY_BUFFER,colorBuffer_a); // activate that buffer
-        gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(colorArray_a),gl.STATIC_DRAW); // coords to that buffer
-        // colorBuffer_a.itemSize = 4;
-        // colorBuffer_a.numSize = colorArray_a.length / colorBuffer_a.itemSize ;
-
-        //setting the color of the shapes
-        colorBuffer_d = gl.createBuffer(); // init empty vertex coord buffer
-        gl.bindBuffer(gl.ARRAY_BUFFER,colorBuffer_d); // activate that buffer
-        gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(colorArray_d),gl.STATIC_DRAW); // coords to that buffer
-        // colorBuffer_d.itemSize = 4;
-        // colorBuffer_d.numSize = colorArray_d.length / colorBuffer_d.itemSize ;
-
-        // //setting the color of the shapes
-        colorBuffer_s = gl.createBuffer(); // init empty vertex coord buffer
-        gl.bindBuffer(gl.ARRAY_BUFFER,colorBuffer_s); // activate that buffer
-        gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(colorArray_s),gl.STATIC_DRAW); // coords to that buffer
-        // colorBuffer_s.itemSize = 4;
-        // colorBuffer_s.numSize = colorArray_s.length / colorBuffer_s.itemSize ;
-
-
         normalBuffer = gl.createBuffer(); // init empty vertex coord buffer
         gl.bindBuffer(gl.ARRAY_BUFFER,normalBuffer); // activate that buffer
         gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(normalArray),gl.STATIC_DRAW); // coords to that buffer
@@ -369,9 +359,12 @@ function setupShaders() {
     var vShaderCode = `
         attribute vec3 vertexPosition;
         attribute vec3 normalfPosition;
-        attribute vec4 aVertexColor_diffuse;
-        attribute vec4 aVertexColor_ambient;
-        attribute vec4 aVertexColor_specular;
+
+
+
+        uniform vec4 aVertexColor_diffuse;
+        uniform vec4 aVertexColor_ambient;
+        uniform vec4 aVertexColor_specular;
 
         uniform float spec_value;
 
@@ -450,7 +443,7 @@ function setupShaders() {
         } else { // no compile errors
            console.log("no compile errors")
           
-            var shaderProgram = gl.createProgram(); // create the single shader program
+             shaderProgram = gl.createProgram(); // create the single shader program
             gl.attachShader(shaderProgram, fShader); // put frag shader in program
             gl.attachShader(shaderProgram, vShader); // put vertex shader in program
             gl.linkProgram(shaderProgram); // link program into gl context
@@ -467,14 +460,13 @@ function setupShaders() {
 
 
                 // colors
-                vertexColorAttrib_a = gl.getAttribLocation(shaderProgram, "aVertexColor_ambient"); // get pointer to vertex color input
-                gl.enableVertexAttribArray(vertexColorAttrib_a); 
+                vertexColorAttrib_a = gl.getUniformLocation(shaderProgram,"aVertexColor_ambient")
 
-                vertexColorAttrib_d = gl.getAttribLocation(shaderProgram, "aVertexColor_diffuse"); // get pointer to vertex color input
-                gl.enableVertexAttribArray(vertexColorAttrib_d); 
 
-                vertexColorAttrib_s = gl.getAttribLocation(shaderProgram, "aVertexColor_specular"); // get pointer to vertex color input
-                gl.enableVertexAttribArray(vertexColorAttrib_s); 
+                vertexColorAttrib_d =  gl.getUniformLocation(shaderProgram,"aVertexColor_diffuse")
+
+
+                vertexColorAttrib_s = gl.getUniformLocation(shaderProgram,"aVertexColor_specular")
 
                 //normal
 
@@ -506,16 +498,7 @@ function renderTriangles() {
     gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffer); // activate
     gl.vertexAttribPointer(vertexPositionAttrib,3,gl.FLOAT,false,0,0); // feed
 
-    //vertex color buffer : activate and feed into color shader
-    gl.bindBuffer(gl.ARRAY_BUFFER,colorBuffer_a); // activate
-    gl.vertexAttribPointer(vertexColorAttrib_a,4,gl.FLOAT,false,0,0); // feed
-
-    gl.bindBuffer(gl.ARRAY_BUFFER,colorBuffer_d); // activate
-    gl.vertexAttribPointer(vertexColorAttrib_d,4,gl.FLOAT,false,0,0); 
-
-    gl.bindBuffer(gl.ARRAY_BUFFER,colorBuffer_s); // activate
-    gl.vertexAttribPointer(vertexColorAttrib_s,4,gl.FLOAT,false,0,0); 
-
+ 
     gl.bindBuffer(gl.ARRAY_BUFFER,normalBuffer); // activate
     gl.vertexAttribPointer(vertexNormalAttrib,3,gl.FLOAT,false,0,0); // feed
 
