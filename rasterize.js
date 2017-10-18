@@ -16,11 +16,11 @@ var gl = null; // the all powerful gl object. It's all here folks!
 
 var vertexBuffer; // this contains vertex coordinates in triples
 var triangleBuffer; // this contains indices into vertexBuffer in triples
+var normalBuffer;
 
 var colorBuffer_a;
 var colorBuffer_d;
 var colorBuffer_s;
-var normalBuffer;
 
 
 
@@ -37,6 +37,27 @@ var vertexNormalAttrib;
 var specularIndex;
 
 var shaderProgram ;
+
+
+var globals = {
+
+array4buffers : {
+    coordArray : [] ,
+    normalArray : [],
+    indexArray : []
+},
+
+ellipsoids : {
+    latitudeBands : 50,
+    longitudeBands : 50
+}
+
+
+};
+
+
+
+
 
 // ASSIGNMENT HELPER FUNCTIONS
 
@@ -97,309 +118,42 @@ function setupWebGL() {
 
 
 
-
-function loadShapes(desc = ""){
-        var inputEllipsoids = getJSONFile(INPUT_ELLIPSOIDS_URL,"ellipsoids");
-        var inputTriangles = getJSONFile(INPUT_TRIANGLES_URL,"triangles");
-
-       // console.log(JSON.stringify(inputEllipsoids))
-      if (inputEllipsoids != String.null && inputTriangles != String.null) { 
-
-
-        var whichSetVert; // index of vertex in current triangle set
-        var whichSetTri; // index of triangle in current triangle set
-      
-        var coordArray = []; // 1D array of vertex coords for WebGL
-        var indexArray = []; // 1D array of vertex indices for WebGL
-        var normalArray = [];
-       
-
-        var vtxBufferSize = 0; // the number of vertices in the vertex buffer
-
-        var vtxToAdd = []; // vtx coords to add to the coord array
-        var normalToAdd = [];
-
-        var indexOffset = vec3.create(); // the index offset for the current set
-        var triToAdd = vec3.create(); // tri indices to add to the index array
-
-
-        /*******************************************************************/
-
-        // Ellipsoids
-        if(desc != "triangles" ) 
-        for (var epllipsoidIndex=0; epllipsoidIndex<inputEllipsoids.length; epllipsoidIndex++) {
-
-            vec3.set(indexOffset,vtxBufferSize,vtxBufferSize,vtxBufferSize); // update vertex offset
-            
-            var currentEllipsoid = inputEllipsoids[epllipsoidIndex];
-
-                 //setting up Ellipsoid Vertices
-                 currentEllipsoid.vertices = [];
-                 currentEllipsoid.triangles = [];
-                 currentEllipsoid.normals = [];
-
-            var diffuse_color = currentEllipsoid.diffuse;
-            var ambient_color = currentEllipsoid.ambient;
-            var specular_color = currentEllipsoid.specular;
-
-              
-
-            gl.uniform1f(specularIndex, currentEllipsoid.n);
-
-
-
-            
-            console.log([ambient_color[0],ambient_color[1],ambient_color[2],1]);
-            vertexColorAttrib_a = [ambient_color[0],ambient_color[1],ambient_color[2],1] ;
-            vertexColorAttrib_d = [diffuse_color[0],diffuse_color[1],diffuse_color[2],1] ;
-            vertexColorAttrib_s = [specular_color[0],specular_color[1],specular_color[2],1] ; 
-            gl.uniform4fv(shaderProgram , vertexColorAttrib_a);
-            gl.uniform4fv(shaderProgram , vertexColorAttrib_d);
-             gl.uniform4fv(shaderProgram , vertexColorAttrib_s);
-
-                // predefined
-                var latitudeBands = 50;
-                var longitudeBands = 50;
-               
-            for (var latNumber = 0; latNumber <= latitudeBands; latNumber++) {
-                var theta = latNumber * Math.PI / latitudeBands;
-                var sinTheta = Math.sin(theta);
-                var cosTheta = Math.cos(theta);
-
-                for (var longNumber = 0; longNumber <= longitudeBands; longNumber++) {
-                    var vertex = [];
-                    var normal = [];
-
-                    var phi = longNumber * 2 * Math.PI / longitudeBands;
-                    var sinPhi = Math.sin(phi);
-                    var cosPhi = Math.cos(phi);
-
-                    var x = (cosPhi * sinTheta) ;
-                    var y = (cosTheta) ;
-                    var z = sinPhi * sinTheta;
-                    var u = 1 - (longNumber / longitudeBands);
-                    var v = 1 - (latNumber / latitudeBands);
-
-                    normal.push(x);
-                    normal.push(y);
-                    normal.push(z);
-
-                    vertex.push((currentEllipsoid.a * x) + currentEllipsoid.x);
-                    vertex.push((currentEllipsoid.b * y)  + currentEllipsoid.y);
-                    vertex.push((currentEllipsoid.c * z)  + currentEllipsoid.z);
-                    currentEllipsoid.vertices.push(vertex);
-                    currentEllipsoid.normals.push(normal);
-
-                }
-            } // end of latitude for loop
-
-            //console.log(currentEllipsoid.vertices)
-
-            // indices or triangles
-
-                for (var latNumber = 0; latNumber < latitudeBands; latNumber++) {
-                    for (var longNumber = 0; longNumber < longitudeBands; longNumber++) {
-                        var index = [];
-                        var first = (latNumber * (longitudeBands + 1)) + longNumber;
-                        var second = first + longitudeBands + 1;
-                        index.push(first);
-                        index.push(second);
-                        index.push(first + 1);
-                        currentEllipsoid.triangles.push(index);
-
-                        index = [];
-                        index.push(second);
-                        index.push(second + 1);
-                        index.push(first + 1);
-                        currentEllipsoid.triangles.push(index);
-                    }
-                }
-
-
-            for (var normalIndex = 0; normalIndex <  currentEllipsoid.normals.length ; normalIndex++) {
-
-                normalToAdd = currentEllipsoid.normals[normalIndex];
-                normalArray.push(normalToAdd[0],normalToAdd[1],normalToAdd[2])
-            }
-
-            //   same logic as for triangle
-            for (whichSetVert=0; whichSetVert < currentEllipsoid.vertices.length; whichSetVert++) {
-                vtxToAdd = currentEllipsoid.vertices[whichSetVert];
-                coordArray.push(vtxToAdd[0],vtxToAdd[1],vtxToAdd[2]);
-
-         
-                
-            } // end for vertices in set
-               
-               console.log("no of triangle vertex  groups : "+coordArray.length / 3) 
-              
-                
-            // set up the triangle index array, adjusting indices across sets
-            for (whichSetTri=0; whichSetTri < currentEllipsoid.triangles.length; whichSetTri++) {
-                vec3.add(triToAdd,indexOffset,currentEllipsoid.triangles[whichSetTri]);
-                indexArray.push(triToAdd[0],triToAdd[1],triToAdd[2]);
-            } // end for triangles in set
-
-
-
-
-
-            vtxBufferSize += currentEllipsoid.vertices.length; // total number of vertices
-            triBufferSize += currentEllipsoid.triangles.length; // total number of tris
-        } // end for each triangle set 
-
-
-        console.log(" vertices : " + coordArray.length / 3)
-
-
-        /*******************************************************************/
-
-
-        //Triangles 
-
-        if(desc != "ellipsoids" ) 
-        for (var whichSet=0; whichSet<inputTriangles.length; whichSet++) {
-
-
-
-            vec3.set(indexOffset,vtxBufferSize,vtxBufferSize,vtxBufferSize); // update vertex offset
-            
-            var currentTriangle = inputTriangles[whichSet];
-
-            var diffuse_color = currentTriangle.material.diffuse;
-            var ambient_color = currentTriangle.material.ambient;
-            var specular_color = currentTriangle.material.specular;
-
-  
-            console.log([ambient_color[0],ambient_color[1],ambient_color[2],1]);
-            vertexColorAttrib_a = [ambient_color[0],ambient_color[1],ambient_color[2],1] ;
-            vertexColorAttrib_d = [diffuse_color[0],diffuse_color[1],diffuse_color[2],1] ;
-            vertexColorAttrib_s = [specular_color[0],specular_color[1],specular_color[2],1] ; 
-            
-            gl.uniform4fv(shaderProgram , vertexColorAttrib_a);
-            gl.uniform4fv(shaderProgram , vertexColorAttrib_d);
-            gl.uniform4fv(shaderProgram , vertexColorAttrib_s);
-
-
-
-            gl.uniform1f(specularIndex, currentTriangle.n);
-
-            for (var normalIndex = 0; normalIndex <  currentTriangle.normals.length ; normalIndex++) {
-
-                normalToAdd = currentTriangle.normals[normalIndex];
-                normalArray.push(normalToAdd[0],normalToAdd[1],normalToAdd[2])
-            }
-
-
-            // set up the vertex coord array
-            for (whichSetVert=0; whichSetVert < currentTriangle.vertices.length; whichSetVert++) {
-                vtxToAdd = currentTriangle.vertices[whichSetVert];
-                coordArray.push(vtxToAdd[0],vtxToAdd[1],vtxToAdd[2]);
-                              
-            } // end for vertices in set
-            
-            // set up the triangle index array, adjusting indices across sets
-            for (whichSetTri=0; whichSetTri < currentTriangle.triangles.length; whichSetTri++) {
-                vec3.add(triToAdd,indexOffset,currentTriangle.triangles[whichSetTri]);
-                indexArray.push(triToAdd[0],triToAdd[1],triToAdd[2]);
-            } // end for triangles in set
-
-            // console.log(indexArray);
-
-            vtxBufferSize += currentTriangle.vertices.length; // total number of vertices
-            triBufferSize += currentTriangle.triangles.length; // total number of tris
-        } // end for each triangle set 
-
-        /*******************************************************************/
-
-
-        triBufferSize *= 3; // now total number of indices
-        // send the vertex coords to webGL
-    
-
-        vertexBuffer = gl.createBuffer(); // init empty vertex coord buffer
-        gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffer); // activate that buffer
-        gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(coordArray),gl.STATIC_DRAW); // coords to that buffer
-        
-       
-        normalBuffer = gl.createBuffer(); // init empty vertex coord buffer
-        gl.bindBuffer(gl.ARRAY_BUFFER,normalBuffer); // activate that buffer
-        gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(normalArray),gl.STATIC_DRAW); // coords to that buffer
-        
-
-      
-        // send the triangle indices to webGL
-        triangleBuffer = gl.createBuffer(); // init empty triangle index buffer
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, triangleBuffer); // activate that buffer
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(indexArray),gl.STATIC_DRAW); // indices to that buffer
-
-
-
-      }
-
-}
-
-
-
 // setup the webGL shaders
 function setupShaders() {
     
     // define fragment shader in essl using es6 template strings
     var fShaderCode = `
         precision highp float;
-       
-        varying vec4 vColor ;
-
-        void main(void) {
-            gl_FragColor = vColor; // all fragments are white
-        }
-    `;
-    
-    // define vertex shader in essl using es6 template strings
-    var vShaderCode = `
-        attribute vec3 vertexPosition;
-        attribute vec3 normalfPosition;
-
-
 
         uniform vec4 aVertexColor_diffuse;
         uniform vec4 aVertexColor_ambient;
         uniform vec4 aVertexColor_specular;
-
         uniform float spec_value;
-
-
+        
          vec3 lightPos = vec3(-1.0,3.0,-0.5);
          vec4 ambientColor = vec4(1.0, 1.0, 1.0, 1.0);
          vec4 diffuseColor = vec4(1.0, 1.0, 1.0,1.0);
          vec4 specColor = vec4(1.0, 1.0, 1.0,1.0);
+         vec3 eye = vec3(1,1,-0.5);
         
-         vec3 eye = vec3(0.5,0.5,-0.5);
-
-         vec4 tempColor;
+         float specular = 0.0;
 
 
-        varying vec4 vColor;
-        float specular = 0.0;
-
- 
+        varying vec3 normal;
+        varying vec3 vertex;
+        vec4 tempColor;
 
         void main(void) {
-            gl_Position = vec4(vertexPosition.xyz,1.0) ; // use the untransformed position
 
-            // code for bling phong model
-            vec3 lightDir = normalize(lightPos - vertexPosition);
-            vec3 viewDir = normalize(eye - vertexPosition);
+               // code for bling phong model
+            vec3 lightDir = normalize(lightPos - vertex);
+            vec3 viewDir = normalize(eye - vertex);
             vec3 halfDir = normalize(lightDir + viewDir);
 
-            float lambertian = max(dot(lightDir,normalfPosition), 0.0); // LdoN
-            float specAngle = max(dot(halfDir, normalfPosition), 0.0); // HdotN
+            float lambertian = max(dot(lightDir,normal), 0.0); // LdoN
+            float specAngle = max(dot(halfDir, normal), 0.0); // HdotN
 
             specular = pow(specAngle, spec_value);
-
-
-
-
 
             tempColor = (ambientColor * aVertexColor_ambient )+ (diffuseColor * aVertexColor_diffuse * lambertian )+ (specColor *aVertexColor_specular * specAngle) ;
             if (tempColor.x > 1.0)
@@ -419,7 +173,22 @@ function setupShaders() {
                 tempColor.w = 1.0;
             }
 
-            vColor = tempColor;
+            gl_FragColor = tempColor; // all fragments are white
+
+        }
+    `;
+    
+    // define vertex shader in essl using es6 template strings
+    var vShaderCode = `
+        attribute vec3 vertexPosition;
+        attribute vec3 normalfPosition;
+
+        varying vec3 normal; // for passing info to fshader
+        varying vec3 vertex;// for passing info to fshader
+        void main(void) {
+            gl_Position = vec4(vertexPosition.xyz,1.0) ; // use the untransformed position
+            normal = normalfPosition;
+            vertex = vertexPosition;
                     }
     `;
     
@@ -442,8 +211,7 @@ function setupShaders() {
             gl.deleteShader(vShader);
         } else { // no compile errors
            console.log("no compile errors")
-          
-             shaderProgram = gl.createProgram(); // create the single shader program
+            shaderProgram = gl.createProgram(); // create the single shader program
             gl.attachShader(shaderProgram, fShader); // put frag shader in program
             gl.attachShader(shaderProgram, vShader); // put vertex shader in program
             gl.linkProgram(shaderProgram); // link program into gl context
@@ -480,6 +248,10 @@ function setupShaders() {
                 // input to shader from array
             } // end if no shader program link errors
         } // end if no compile errors
+
+    // clearing the buffers before use
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); // clear frame/depth buffers
+
     } // end try 
     
     catch(e) {
@@ -490,9 +262,249 @@ function setupShaders() {
 
 
 
+
+function clearCache(){
+
+        globals.array4buffers.coordArray = [];
+        globals.array4buffers.indexArray = [];
+        globals.array4buffers.normalArray = [];
+
+}
+
+
+function loadShapes(desc = ""){
+        var inputEllipsoids = getJSONFile(INPUT_ELLIPSOIDS_URL,"ellipsoids");
+        var inputTriangles = getJSONFile(INPUT_TRIANGLES_URL,"triangles");
+
+       // console.log(JSON.stringify(inputEllipsoids))
+      if (inputEllipsoids != String.null && inputTriangles != String.null) { 
+
+       /*******************************************************************/
+
+        // Ellipsoids
+        if(desc != "triangles" ) 
+        for (var epllipsoidIndex=0; epllipsoidIndex<inputEllipsoids.length; epllipsoidIndex++) {
+            clearCache();
+            var vtxToAdd = []; // vtx coords to add to the coord array
+            var normalToAdd = [];
+
+            var indexOffset = vec3.create(); // the index offset for the current set
+            var triToAdd = vec3.create(); // tri indices to add to the index array
+
+            triBufferSize = 0;
+        
+            vec3.set(indexOffset,0,0,0); // update vertex offset
+            
+            var currentEllipsoid = inputEllipsoids[epllipsoidIndex];
+
+            //setting up Ellipsoid Vertices
+            currentEllipsoid.vertices = [];
+            currentEllipsoid.triangles = [];
+            currentEllipsoid.normals = [];
+
+
+            gl.uniform1f(specularIndex, currentEllipsoid.n);
+            var ambient_color_array = [currentEllipsoid.ambient[0],currentEllipsoid.ambient[1],currentEllipsoid.ambient[2],1] ;
+            var diffuse_color_array = [currentEllipsoid.diffuse[0],currentEllipsoid.diffuse[1],currentEllipsoid.diffuse[2],1] ;
+            var specular_color_array = [currentEllipsoid.specular[0],currentEllipsoid.specular[1],currentEllipsoid.specular[2],1] ; 
+
+            gl.uniform4fv(vertexColorAttrib_a , ambient_color_array);
+            gl.uniform4fv(vertexColorAttrib_d , diffuse_color_array);
+            gl.uniform4fv(vertexColorAttrib_s , specular_color_array);
+
+               
+            for (var latNumber = 0; latNumber <= globals.ellipsoids.latitudeBands; latNumber++) {
+                var theta = latNumber * Math.PI / globals.ellipsoids.latitudeBands;
+                var sinTheta = Math.sin(theta);
+                var cosTheta = Math.cos(theta);
+
+                for (var longNumber = 0; longNumber <= globals.ellipsoids.longitudeBands; longNumber++) {
+                    var vertex = [];
+                    var normal = [];
+
+                    var phi = longNumber * 2 * Math.PI / globals.ellipsoids.longitudeBands;
+                    var sinPhi = Math.sin(phi);
+                    var cosPhi = Math.cos(phi);
+
+                    var x = (cosPhi * sinTheta) ;
+                    var y = (cosTheta) ;
+                    var z = sinPhi * sinTheta;
+                    var u = 1 - (longNumber / globals.ellipsoids.longitudeBands);
+                    var v = 1 - (latNumber / globals.ellipsoids.longitudeBands);
+
+                    normal.push(x);
+                    normal.push(y);
+                    normal.push(z);
+
+                    vertex.push((currentEllipsoid.a * x) + currentEllipsoid.x);
+                    vertex.push((currentEllipsoid.b * y)  + currentEllipsoid.y);
+                    vertex.push((currentEllipsoid.c * z)  + currentEllipsoid.z);
+                    currentEllipsoid.vertices.push(vertex);
+                    currentEllipsoid.normals.push(normal);
+
+                }
+            } // end of latitude for loop
+
+            //console.log(currentEllipsoid.vertices)
+
+            // indices or triangles
+
+                for (var latNumber = 0; latNumber < globals.ellipsoids.latitudeBands; latNumber++) {
+                    for (var longNumber = 0; longNumber < globals.ellipsoids.longitudeBands; longNumber++) {
+                        var index = [];
+                        var first = (latNumber * (globals.ellipsoids.longitudeBands + 1)) + longNumber;
+                        var second = first + globals.ellipsoids.longitudeBands + 1;
+                        index.push(first);
+                        index.push(second);
+                        index.push(first + 1);
+                        currentEllipsoid.triangles.push(index);
+
+                        index = [];
+                        index.push(second);
+                        index.push(second + 1);
+                        index.push(first + 1);
+                        currentEllipsoid.triangles.push(index);
+                    }
+                }
+
+
+            for (var normalIndex = 0; normalIndex <  currentEllipsoid.normals.length ; normalIndex++) {
+
+                normalToAdd = currentEllipsoid.normals[normalIndex];
+                globals.array4buffers.normalArray .push(normalToAdd[0],normalToAdd[1],normalToAdd[2])
+            }
+
+            //   same logic as for triangle
+            for (var whichSetVert=0; whichSetVert < currentEllipsoid.vertices.length; whichSetVert++) {
+                vtxToAdd = currentEllipsoid.vertices[whichSetVert];
+                globals.array4buffers.coordArray.push(vtxToAdd[0],vtxToAdd[1],vtxToAdd[2]);
+
+         
+                
+            } // end for vertices in set
+               
+               console.log("no of triangle vertex  groups : "+globals.array4buffers.coordArray.length / 3) 
+              
+                
+            // set up the triangle index array, adjusting indices across sets
+            for ( var whichSetTri=0; whichSetTri < currentEllipsoid.triangles.length; whichSetTri++) {
+                vec3.add(triToAdd,indexOffset,currentEllipsoid.triangles[whichSetTri]);
+                globals.array4buffers.indexArray.push(triToAdd[0],triToAdd[1],triToAdd[2]);
+            } // end for triangles in set
+
+            triBufferSize += currentEllipsoid.triangles.length; // total number of tris
+
+             triBufferSize *= 3;
+
+        
+            renderShape();
+
+
+
+        } // end for each Ellipsoid set 
+
+
+    
+
+
+        /*******************************************************************/
+
+
+
+        //Triangles 
+
+        if(desc != "ellipsoids" ) 
+        for (var whichSet=0; whichSet<inputTriangles.length; whichSet++) {
+            clearCache();
+            var vtxToAdd = []; // vtx coords to add to the coord array
+            var normalToAdd = [];
+
+            var indexOffset = vec3.create(); // the index offset for the current set
+            var triToAdd = vec3.create(); // tri indices to add to the index array
+            triBufferSize = 0
+
+            /////////////////
+
+            vec3.set(indexOffset,0,0,0); // update vertex offset
+            
+            var currentTriangle = inputTriangles[whichSet];
+
+            var diffuse_color = currentTriangle.material.diffuse;
+            var ambient_color = currentTriangle.material.ambient;
+            var specular_color = currentTriangle.material.specular;
+
+  
+            console.log([ambient_color[0],ambient_color[1],ambient_color[2],1]);
+            var ambient_color_array = [ambient_color[0],ambient_color[1],ambient_color[2],1] ;
+            var diffuse_color_array = [diffuse_color[0],diffuse_color[1],diffuse_color[2],1] ;
+            var specular_color_array = [specular_color[0],specular_color[1],specular_color[2],1] ; 
+            
+            gl.uniform4fv( vertexColorAttrib_a , ambient_color_array);
+            gl.uniform4fv( vertexColorAttrib_d , diffuse_color_array);
+            gl.uniform4fv( vertexColorAttrib_s , specular_color_array);
+
+            gl.uniform1f(specularIndex, currentTriangle.n);
+
+            for (var normalIndex = 0; normalIndex <  currentTriangle.normals.length ; normalIndex++) {
+
+                normalToAdd = currentTriangle.normals[normalIndex];
+                globals.array4buffers.normalArray .push(normalToAdd[0],normalToAdd[1],normalToAdd[2])
+            }
+
+
+            // set up the vertex coord array
+            for (var whichSetVert=0; whichSetVert < currentTriangle.vertices.length; whichSetVert++) {
+                vtxToAdd = currentTriangle.vertices[whichSetVert];
+                globals.array4buffers.coordArray.push(vtxToAdd[0],vtxToAdd[1],vtxToAdd[2]);
+                              
+            } // end for vertices in set
+            
+            // set up the triangle index array, adjusting indices across sets
+            for (var whichSetTri=0; whichSetTri < currentTriangle.triangles.length; whichSetTri++) {
+                vec3.add(triToAdd,indexOffset,currentTriangle.triangles[whichSetTri]);
+                globals.array4buffers.indexArray.push(triToAdd[0],triToAdd[1],triToAdd[2]);
+            } // end for triangles in set
+
+            triBufferSize += currentTriangle.triangles.length; // total number of tris
+            ////////////////////////////////////////////////////////////////////////////////////
+
+
+        triBufferSize *= 3; // now total number of indices
+       
+
+       renderShape();
+        } 
+
+        
+
+      }
+     
+
+}
+
+
+
 // render the loaded model
-function renderTriangles() {
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); // clear frame/depth buffers
+function renderShape() {
+
+     // send the vertex coords to webGL
+       
+
+        vertexBuffer = gl.createBuffer(); // init empty vertex coord buffer
+        gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffer); // activate that buffer
+        gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(globals.array4buffers.coordArray),gl.STATIC_DRAW); // coords to that buffer
+        
+       
+        normalBuffer = gl.createBuffer(); // init empty vertex coord buffer
+        gl.bindBuffer(gl.ARRAY_BUFFER,normalBuffer); // activate that buffer
+        gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(globals.array4buffers.normalArray ),gl.STATIC_DRAW); // coords to that buffer
+        
+
+      
+        // send the triangle indices to webGL
+        triangleBuffer = gl.createBuffer(); // init empty triangle index buffer
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, triangleBuffer); // activate that buffer
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(globals.array4buffers.indexArray),gl.STATIC_DRAW); // indices to that buffer
     
     // vertex buffer: activate and feed into vertex shader
     gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffer); // activate
@@ -519,8 +531,7 @@ function main() {
   
   setupWebGL(); // set up the webGL environment
  // loadTriangles(); // load in the triangles from tri file
+  setupShaders();
   loadShapes("");
-  setupShaders(); // setup the webGL shaders
-  renderTriangles(); // draw the triangles using webGL
-  
+  // setup the webGL shaders
 } // end main
