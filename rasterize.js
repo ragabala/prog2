@@ -7,21 +7,23 @@ const WIN_BOTTOM = 0; const WIN_TOP = 1;  // default top and bottom y coords in 
 //const INPUT_TRIANGLES_URL = "https://ncsucgclass.github.io/prog2/triangles.json"; // triangles file loc
 //const INPUT_SPHERES_URL = "https://ncsucgclass.github.io/prog2/ellipsoids.json"; // ellipsoids file loc
 
-const INPUT_ELLIPSOIDS_URL = "https://demo8647310.mockable.io/"
+const INPUT_ELLIPSOIDS_URL = "https://ncsucgclass.github.io/prog2/ellipsoids.json"
 const INPUT_TRIANGLES_URL  ="https://demo2448912.mockable.io"
 // default eye position in world space
 
 /* webgl globals */
 var gl = null; // the all powerful gl object. It's all here folks!
 
-var vertexBuffer; // this contains vertex coordinates in triples
-var triangleBuffer; // this contains indices into vertexBuffer in triples
-var normalBuffer;
+var vertexBuffer = []; // this contains vertex coordinates in triples
+var triangleBuffer = []; // this contains indices into vertexBuffer in triples
+var normalBuffer = [];
 
 var colorBuffer_a;
 var colorBuffer_d;
 var colorBuffer_s;
 
+var shapeIndex = 0;
+var noOfShapes = 0;
 
 
  // color buffer contains r g b a for each fragments
@@ -35,9 +37,18 @@ var vertexColorAttrib_s;
 var vertexNormalAttrib;
 
 var specularIndex;
+var model_matrix_uniform;
+var perspective_matrix_uniform;
 
 var shaderProgram ;
 
+var mvMatrix;
+var pMatrix;
+
+
+var eyePos = [0.5,0.5,-0.5];
+var lookUpVals = [0,1,0];
+var lookAtVals = [0.5,0.5,0];
 
 var globals = {
 
@@ -96,6 +107,8 @@ function setupWebGL() {
     // Get the canvas and context
     var canvas = document.getElementById("myWebGLCanvas"); // create a js canvas
     gl = canvas.getContext("webgl"); // get a webgl object from it
+    gl.viewportWidth = canvas.width;
+    gl.viewportHeight = canvas.height;
     
     try {
       if (gl == null) {
@@ -134,20 +147,24 @@ function setupShaders() {
          vec4 ambientColor = vec4(1.0, 1.0, 1.0, 1.0);
          vec4 diffuseColor = vec4(1.0, 1.0, 1.0,1.0);
          vec4 specColor = vec4(1.0, 1.0, 1.0,1.0);
-         vec3 eye = vec3(1,1,-0.5);
+         vec3 eye = vec3(0.5,0.5,-0.5);
         
          float specular = 0.0;
 
 
         varying vec3 normal;
-        varying vec3 vertex;
+        varying vec4 vertex;
+
         vec4 tempColor;
+
+        vec3 vertextemp;
 
         void main(void) {
 
+            vertextemp = vertex.xyz;
                // code for bling phong model
-            vec3 lightDir = normalize(lightPos - vertex);
-            vec3 viewDir = normalize(eye - vertex);
+            vec3 lightDir = normalize(lightPos - vertextemp);
+            vec3 viewDir = normalize(eye - vertextemp);
             vec3 halfDir = normalize(lightDir + viewDir);
 
             float lambertian = max(dot(lightDir,normal), 0.0); // LdoN
@@ -184,11 +201,17 @@ function setupShaders() {
         attribute vec3 normalfPosition;
 
         varying vec3 normal; // for passing info to fshader
-        varying vec3 vertex;// for passing info to fshader
+        varying vec4 vertex;// for passing info to fshader
+
+        uniform mat4 mvmatrix; // the one whole solution for representing the positions
+        uniform mat4 pmatrix;
+
+
         void main(void) {
-            gl_Position = vec4(vertexPosition.xyz,1.0) ; // use the untransformed position
+            vertex = pmatrix * mvmatrix * vec4(vertexPosition.xyz,1.0) ;
+            gl_Position = vertex; // use the untransformed position
             normal = normalfPosition;
-            vertex = vertexPosition;
+           
                     }
     `;
     
@@ -244,6 +267,8 @@ function setupShaders() {
 
                   // specular reflection
                 specularIndex = gl.getUniformLocation(shaderProgram,"spec_value")
+                model_matrix_uniform = gl.getUniformLocation(shaderProgram,"mvmatrix")
+                perspective_matrix_uniform = gl.getUniformLocation(shaderProgram,"pmatrix")
 
                 // input to shader from array
             } // end if no shader program link errors
@@ -261,20 +286,42 @@ function setupShaders() {
 } // end setup shaders
 
 
+/*function normalizeVector(x,y,z)
+{
+    var mag = sq(x)+sq(y)+sq(z)
+    mag = Math.sqrt(mag)
+    return [x/mag,y/mag,z/mag];
 
+}*/
 
 function clearCache(){
 
         globals.array4buffers.coordArray = [];
         globals.array4buffers.indexArray = [];
         globals.array4buffers.normalArray = [];
+      
+        mvMatrix = mat4.create();
+        pMatrix = mat4.create();
+
+        mat4.lookAt(mvMatrix,eyePos,lookAtVals,lookUpVals)
+        mat4.perspective(pMatrix,Math.PI/2,1,0.1,1000);
 
 }
 
+function setUniformMatrices(){
+    gl.uniformMatrix4fv(model_matrix_uniform,false,mvMatrix);
+    gl.uniformMatrix4fv(perspective_matrix_uniform,false,pMatrix);
+}
+
+function sq(x)
+{return (x)*(x);}
 
 function loadShapes(desc = ""){
         var inputEllipsoids = getJSONFile(INPUT_ELLIPSOIDS_URL,"ellipsoids");
         var inputTriangles = getJSONFile(INPUT_TRIANGLES_URL,"triangles");
+
+         
+
 
        // console.log(JSON.stringify(inputEllipsoids))
       if (inputEllipsoids != String.null && inputTriangles != String.null) { 
@@ -282,9 +329,15 @@ function loadShapes(desc = ""){
        /*******************************************************************/
 
         // Ellipsoids
-        if(desc != "triangles" ) 
+        if(desc == "ellipsoids" || desc == "") 
         for (var epllipsoidIndex=0; epllipsoidIndex<inputEllipsoids.length; epllipsoidIndex++) {
             clearCache();
+
+
+            //adding the per
+           
+
+
             var vtxToAdd = []; // vtx coords to add to the coord array
             var normalToAdd = [];
 
@@ -302,7 +355,7 @@ function loadShapes(desc = ""){
             currentEllipsoid.triangles = [];
             currentEllipsoid.normals = [];
 
-
+            console.log("Shape index",shapeIndex," spec :",currentEllipsoid.n)
             gl.uniform1f(specularIndex, currentEllipsoid.n);
             var ambient_color_array = [currentEllipsoid.ambient[0],currentEllipsoid.ambient[1],currentEllipsoid.ambient[2],1] ;
             var diffuse_color_array = [currentEllipsoid.diffuse[0],currentEllipsoid.diffuse[1],currentEllipsoid.diffuse[2],1] ;
@@ -326,26 +379,45 @@ function loadShapes(desc = ""){
                     var sinPhi = Math.sin(phi);
                     var cosPhi = Math.cos(phi);
 
+                    //with unit radius (sphere)    
                     var x = (cosPhi * sinTheta) ;
                     var y = (cosTheta) ;
                     var z = sinPhi * sinTheta;
+
                     var u = 1 - (longNumber / globals.ellipsoids.longitudeBands);
                     var v = 1 - (latNumber / globals.ellipsoids.longitudeBands);
 
-                    normal.push(x);
-                    normal.push(y);
-                    normal.push(z);
 
-                    vertex.push((currentEllipsoid.a * x) + currentEllipsoid.x);
-                    vertex.push((currentEllipsoid.b * y)  + currentEllipsoid.y);
-                    vertex.push((currentEllipsoid.c * z)  + currentEllipsoid.z);
+                    x = (currentEllipsoid.a * x) + currentEllipsoid.x;
+                    y = (currentEllipsoid.b * y) + currentEllipsoid.y
+                    z = (currentEllipsoid.c * z) + currentEllipsoid.z;
+
+                    var x3 = currentEllipsoid.x; var a = currentEllipsoid.a;
+                    var y3 = currentEllipsoid.y; var b = currentEllipsoid.b;
+                    var z3 = currentEllipsoid.z; var c = currentEllipsoid.c;
+
+                    var normalArrayTemp = [2*sq(b*c)*(x-x3), 2*sq(a*c)*(y-y3), 2*sq(b*a)*(z-z3)];
+                    
+                    var normal_temp = vec3.fromValues(2*sq(b*c)*(x-x3), 2*sq(a*c)*(y-y3), 2*sq(b*a)*(z-z3));
+                    
+                    vec3.normalize(normal_temp,normal_temp)
+           
+                    normal.push(normal_temp[0]);
+                    normal.push(normal_temp[1]);
+                    normal.push(normal_temp[2]);
+
+
+                    vertex.push(x);
+                    vertex.push(y);
+                    vertex.push(z);
+
+
                     currentEllipsoid.vertices.push(vertex);
                     currentEllipsoid.normals.push(normal);
 
                 }
             } // end of latitude for loop
 
-            //console.log(currentEllipsoid.vertices)
 
             // indices or triangles
 
@@ -371,7 +443,7 @@ function loadShapes(desc = ""){
             for (var normalIndex = 0; normalIndex <  currentEllipsoid.normals.length ; normalIndex++) {
 
                 normalToAdd = currentEllipsoid.normals[normalIndex];
-                globals.array4buffers.normalArray .push(normalToAdd[0],normalToAdd[1],normalToAdd[2])
+                globals.array4buffers.normalArray.push(normalToAdd[0],normalToAdd[1],normalToAdd[2])
             }
 
             //   same logic as for triangle
@@ -395,9 +467,10 @@ function loadShapes(desc = ""){
             triBufferSize += currentEllipsoid.triangles.length; // total number of tris
 
              triBufferSize *= 3;
-
-        
-            renderShape();
+            console.log("shapeIndex : "+shapeIndex)
+            shapeIndex+=1;
+            settingBuffers(shapeIndex);
+            renderShape(shapeIndex);
 
 
 
@@ -413,9 +486,10 @@ function loadShapes(desc = ""){
 
         //Triangles 
 
-        if(desc != "ellipsoids" ) 
+        if(desc == "triangles" ||desc == "" ) 
         for (var whichSet=0; whichSet<inputTriangles.length; whichSet++) {
             clearCache();
+         
             var vtxToAdd = []; // vtx coords to add to the coord array
             var normalToAdd = [];
 
@@ -434,7 +508,6 @@ function loadShapes(desc = ""){
             var specular_color = currentTriangle.material.specular;
 
   
-            console.log([ambient_color[0],ambient_color[1],ambient_color[2],1]);
             var ambient_color_array = [ambient_color[0],ambient_color[1],ambient_color[2],1] ;
             var diffuse_color_array = [diffuse_color[0],diffuse_color[1],diffuse_color[2],1] ;
             var specular_color_array = [specular_color[0],specular_color[1],specular_color[2],1] ; 
@@ -469,61 +542,73 @@ function loadShapes(desc = ""){
             ////////////////////////////////////////////////////////////////////////////////////
 
 
-        triBufferSize *= 3; // now total number of indices
+          triBufferSize *= 3; // now total number of indices
        
+         shapeIndex+=1;  
+         settingBuffers(shapeIndex)
+         renderShape(shapeIndex);
+        }  // end of trianlgles
+        console.log("no of shapes ",shapeIndex)
 
-       renderShape();
-        } 
+        noOfShapes = shapeIndex;
+
+
 
         
 
       }
      
 
-}
+} 
 
-
-
-// render the loaded model
-function renderShape() {
+function settingBuffers(index){
 
      // send the vertex coords to webGL
        
 
-        vertexBuffer = gl.createBuffer(); // init empty vertex coord buffer
-        gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffer); // activate that buffer
-        gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(globals.array4buffers.coordArray),gl.STATIC_DRAW); // coords to that buffer
-        
-       
-        normalBuffer = gl.createBuffer(); // init empty vertex coord buffer
-        gl.bindBuffer(gl.ARRAY_BUFFER,normalBuffer); // activate that buffer
-        gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(globals.array4buffers.normalArray ),gl.STATIC_DRAW); // coords to that buffer
-        
-
-      
-        // send the triangle indices to webGL
-        triangleBuffer = gl.createBuffer(); // init empty triangle index buffer
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, triangleBuffer); // activate that buffer
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(globals.array4buffers.indexArray),gl.STATIC_DRAW); // indices to that buffer
+    vertexBuffer[index] = gl.createBuffer(); // init empty vertex coord buffer
+    gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffer[index]); // activate that buffer
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(globals.array4buffers.coordArray),gl.STATIC_DRAW); // coords to that buffer
     
+   
+    normalBuffer[index] = gl.createBuffer(); // init empty vertex coord buffer
+    gl.bindBuffer(gl.ARRAY_BUFFER,normalBuffer[index]); // activate that buffer
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(globals.array4buffers.normalArray),gl.STATIC_DRAW); // coords to that buffer
+    
+
+  
+    // send the triangle indices to webGL
+    triangleBuffer[index] = gl.createBuffer(); // init empty triangle index buffer
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, triangleBuffer[index]); // activate that buffer
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(globals.array4buffers.indexArray),gl.STATIC_DRAW); // indices to that buffer
+
+
+}
+
+// render the loaded model
+function renderShape(index) {
+
     // vertex buffer: activate and feed into vertex shader
-    gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffer); // activate
+    gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffer[index]); // activate
     gl.vertexAttribPointer(vertexPositionAttrib,3,gl.FLOAT,false,0,0); // feed
 
  
-    gl.bindBuffer(gl.ARRAY_BUFFER,normalBuffer); // activate
+    gl.bindBuffer(gl.ARRAY_BUFFER,normalBuffer[index]); // activate
     gl.vertexAttribPointer(vertexNormalAttrib,3,gl.FLOAT,false,0,0); // feed
 
 
     // triangle buffer: activate and render
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, triangleBuffer); // activate
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, triangleBuffer[index]); // activate
 
-
+    setUniformMatrices();
     gl.drawElements(gl.TRIANGLES,triBufferSize,gl.UNSIGNED_SHORT,0); // render
 } // end render triangles
 
 
+function settingUpEvents(){
 
+
+}
 
 /* MAIN -- HERE is where execution begins after window load */
 
