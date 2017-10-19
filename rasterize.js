@@ -47,11 +47,21 @@ var shaderProgram ;
 
 var mvMatrix=[];
 var pMatrix=[];
+var shadingMode;
 
+var light_AmbientColor_attr;
+var light_DiffuseColor_attr;
+var light_SpecularColor_attr;
+var eye_attr;
+var lightpos_attr;
 
 var eyePos = [0.5,0.5,-0.5];
 var lookUpVals = [0,1,0];
 var lookAtVals = [0.5,0.5,0];
+var lightpos = [-1.0,3.0,-0.5];
+var light_AmbientColor = [1.0,1.0,1.0];
+var light_DiffuseColor = [1.0,1.0,1.0];
+var light_SpecularColor = [1.0,1.0,1.0];
 
 var globals = {
 
@@ -147,12 +157,12 @@ function setupShaders() {
         uniform vec4 aVertexColor_specular;
         uniform float spec_value;
         
-         vec3 lightPos = vec3(-1.0,3.0,-0.5);
-         vec4 ambientColor = vec4(1.0, 1.0, 1.0, 1.0);
-         vec4 diffuseColor = vec4(1.0, 1.0, 1.0,1.0);
-         vec4 specColor = vec4(1.0, 1.0, 1.0,1.0);
-         vec3 eye = vec3(0.5,0.5,-0.5);
-         int mode = 2;
+         uniform vec3 lightPos; //= vec3(-1.0,3.0,-0.5);
+         uniform vec4 ambientColor;// = vec4(1.0, 1.0, 1.0, 1.0);
+         uniform vec4 diffuseColor; //= vec4(1.0, 1.0, 1.0,1.0);
+         uniform vec4 specColor;  //vec4(1.0, 1.0, 1.0,1.0);
+         uniform vec3 eye; //vec3(0.5,0.5,-0.5);
+         uniform int mode ;
         
          float specular = 0.0;
 
@@ -211,7 +221,7 @@ function setupShaders() {
             gl_Position = vertex; // use the untransformed position
             normal = normalfPosition;
            
-                    }
+         }
     `;
     
     try {
@@ -257,6 +267,22 @@ function setupShaders() {
 
 
                 vertexColorAttrib_s = gl.getUniformLocation(shaderProgram,"aVertexColor_specular")
+
+
+                //default values
+                light_AmbientColor_attr = gl.getUniformLocation(shaderProgram,"ambientColor")
+                light_DiffuseColor_attr = gl.getUniformLocation(shaderProgram,"diffuseColor")
+                light_SpecularColor_attr = gl.getUniformLocation(shaderProgram,"specColor")
+                lightpos_attr = gl.getUniformLocation(shaderProgram,"lightPos")
+                eye_attr = gl.getUniformLocation(shaderProgram,"eye")
+                shadingMode = gl.getUniformLocation(shaderProgram,"mode")
+
+                gl.uniform1i(shadingMode, 1); 
+                gl.uniform4fv(light_AmbientColor_attr , [1.0,1.0,1.0,1.0]);
+                gl.uniform4fv(light_DiffuseColor_attr , [1.0,1.0,1.0,1.0]);
+                gl.uniform4fv(light_SpecularColor_attr , [1.0,1.0,1.0,1.0]);
+                gl.uniform3fv(eye_attr, eyePos);
+                gl.uniform3fv(lightpos_attr,lightpos);
 
                 //normal
 
@@ -348,6 +374,7 @@ function loadShapes(desc = ""){
                 diffuse : diffuse_color_array,
                 specular : specular_color_array,
                 n : currentEllipsoid.n,
+                mode : 1,
                 center : [currentEllipsoid.x,currentEllipsoid.y,currentEllipsoid.z]
 
              }
@@ -516,6 +543,7 @@ function loadShapes(desc = ""){
                 diffuse : diffuse_color_array,
                 specular : specular_color_array,
                 n : currentTriangle.material.n,
+                mode : 1,
                 center : [centerx,centery,centerz]
 
              }
@@ -642,15 +670,17 @@ function setUniformMatricesAll(){
 function setUniformMatrices(index){
    
     gl.uniformMatrix4fv(model_matrix_uniform,false,mvMatrix[index]);
-    console.log("set uniforms perspective : "+pMatrix[index])
+   // console.log("set uniforms perspective : "+pMatrix[index])
     gl.uniformMatrix4fv(perspective_matrix_uniform,false,pMatrix[index]);
 
     gl.uniform4fv(vertexColorAttrib_a , shapeProperties[index].ambient);
     gl.uniform4fv(vertexColorAttrib_d , shapeProperties[index].diffuse);
     gl.uniform4fv(vertexColorAttrib_s , shapeProperties[index].specular);
     gl.uniform1f(specularIndex, shapeProperties[index].n);
+    gl.uniform1i(shadingMode, shapeProperties[index].mode);
 
 }
+
 
 function sq(x)
 {return (x)*(x);}
@@ -668,10 +698,10 @@ function settingUpEvents(keyCode){
    console.log(keyCode +" "+ charPressed)
 
    /*Highlighting Part Keys 4 6(triangles) 8 9 (ellipsoids) */
-   if(charPressed == '4' || charPressed == '6'){
+   if(charPressed == 'c' || charPressed == 'v'){
         resetModelMatricesAll();
         
-        if(charPressed == '6')
+        if(charPressed == 'v')
         highlightTriangleIndex = (highlightTriangleIndex + 1) %triangleIndices.length;
         else
         {
@@ -684,10 +714,10 @@ function settingUpEvents(keyCode){
        
 
    }
-    if(charPressed == '8' || charPressed == '2'){
+    if(charPressed == 'z' || charPressed == 'x'){
         resetModelMatricesAll();
       
-         if(charPressed == '8')
+         if(charPressed == 'z')
         highlightEllipsoidIndex = (highlightEllipsoidIndex + 1)%ellipsoidIndices.length;
         else
         {
@@ -704,11 +734,77 @@ function settingUpEvents(keyCode){
    if(charPressed == ' ')
    {
      resetModelMatricesAll();
-    
+     currentHighlightedObject = -1;
    }
 
-  
+   //change mode
+   if(charPressed == 'b')
+   {
+    toggleShaderMode();
+   }
+
+   //change specular
+    if(charPressed == 'n')
+   {
+    changeSpecular();
+   }
+
+    if(charPressed == '1' ||charPressed == '2'||charPressed == '3')
+    { 
+    changeColor(charPressed);
+    }
+
    renderAll();
+
+}
+
+
+function changeColor(colorval){
+    if(currentHighlightedObject == -1)
+        return;
+    var color = null
+    if(colorval =='1')
+    var color = shapeProperties[currentHighlightedObject].ambient;
+    else if(colorval =='2')
+    var color = shapeProperties[currentHighlightedObject].diffuse; 
+    else if(colorval =='3')
+    var color = shapeProperties[currentHighlightedObject].specular; 
+    else 
+        return;
+    color[0] = (color[0] + 0.1) %1.1; 
+    color[1] = (color[1] + 0.1) %1.1;
+    color[2] = (color[2] + 0.1) %1.1;
+
+
+    if(colorval =='1')
+    shapeProperties[currentHighlightedObject].ambient = color;
+    else if(colorval =='2')
+    shapeProperties[currentHighlightedObject].diffuse = color; 
+    else if(colorval =='3')
+    shapeProperties[currentHighlightedObject].specular = color; 
+    else 
+        return;
+
+   
+}
+
+function changeSpecular(){
+     if(currentHighlightedObject == -1)
+        return;
+    var n = shapeProperties[currentHighlightedObject].n;
+    n = (n+1)%20;
+    shapeProperties[currentHighlightedObject].n = n;
+}
+
+function toggleShaderMode()
+{
+    
+    for(var index=0 ; index < noOfShapes ; index++)
+    {
+    var mode = shapeProperties[index].mode;
+    mode = (mode==1)?2:1;
+    shapeProperties[index].mode = mode;
+   }
 
 }
 
