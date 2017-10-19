@@ -24,10 +24,13 @@ var colorBuffer_s;
 
 var shapeIndex = 0;
 var noOfShapes = 0;
-
+var triangleIndices = [];
+var ellipsoidIndices = [];
+var shapeProperties = [];
+var currentHighlightedObject = -1;
 
  // color buffer contains r g b a for each fragments
-var triBufferSize = 0; // the number of indices in the triangle buffer
+var triBufferSize = []; // the number of indices in the triangle buffer
 var vertexPositionAttrib; // where to put position for vertex shader
 
 var vertexColorAttrib_a;
@@ -42,8 +45,8 @@ var perspective_matrix_uniform;
 
 var shaderProgram ;
 
-var mvMatrix;
-var pMatrix;
+var mvMatrix=[];
+var pMatrix=[];
 
 
 var eyePos = [0.5,0.5,-0.5];
@@ -66,7 +69,8 @@ ellipsoids : {
 
 };
 
-
+var highlightTriangleIndex=0;
+var highlightEllipsoidIndex=0;
 
 
 
@@ -148,6 +152,7 @@ function setupShaders() {
          vec4 diffuseColor = vec4(1.0, 1.0, 1.0,1.0);
          vec4 specColor = vec4(1.0, 1.0, 1.0,1.0);
          vec3 eye = vec3(0.5,0.5,-0.5);
+         int mode = 2;
         
          float specular = 0.0;
 
@@ -163,34 +168,28 @@ function setupShaders() {
 
             vertextemp = vertex.xyz;
                // code for bling phong model
-            vec3 lightDir = normalize(lightPos - vertextemp);
             vec3 viewDir = normalize(eye - vertextemp);
-            vec3 halfDir = normalize(lightDir + viewDir);
-
+            vec3 lightDir = normalize(lightPos - vertextemp);
             float lambertian = max(dot(lightDir,normal), 0.0); // LdoN
-            float specAngle = max(dot(halfDir, normal), 0.0); // HdotN
 
-            specular = pow(specAngle, spec_value);
+             if(lambertian > 0.0)
+            {             
+                vec3 halfDir = normalize(lightDir + viewDir);
+                float specAngle = max(dot(halfDir, normal), 0.0); // HdotN
+                specular = pow(specAngle, spec_value);
 
-            tempColor = (ambientColor * aVertexColor_ambient )+ (diffuseColor * aVertexColor_diffuse * lambertian )+ (specColor *aVertexColor_specular * specAngle) ;
-            if (tempColor.x > 1.0)
-            {
-                tempColor.x = 1.0;
-            }
-            if (tempColor.y > 1.0)
-            {
-                tempColor.y = 1.0;
-            }
-            if (tempColor.z > 1.0)
-            {
-                tempColor.z = 1.0;
-            }
-            if (tempColor.w > 1.0)
-            {
-                tempColor.w = 1.0;
-            }
+                if(mode == 2) {
+                    vec3 reflectDir = reflect(-lightDir, normal);
+                    specAngle = max(dot(reflectDir, viewDir), 0.0);
+                    // note that the exponent is different here
+                    specular = pow(specAngle, spec_value);
+                }
 
-            gl_FragColor = tempColor; // all fragments are white
+             }          
+
+            gl_FragColor= (ambientColor * aVertexColor_ambient )+ (diffuseColor * aVertexColor_diffuse * lambertian )+ (specColor * aVertexColor_specular * specular) ;
+  
+       
 
         }
     `;
@@ -294,27 +293,6 @@ function setupShaders() {
 
 }*/
 
-function clearCache(){
-
-        globals.array4buffers.coordArray = [];
-        globals.array4buffers.indexArray = [];
-        globals.array4buffers.normalArray = [];
-      
-        mvMatrix = mat4.create();
-        pMatrix = mat4.create();
-
-        mat4.lookAt(mvMatrix,eyePos,lookAtVals,lookUpVals)
-        mat4.perspective(pMatrix,Math.PI/2,1,0.1,1000);
-
-}
-
-function setUniformMatrices(){
-    gl.uniformMatrix4fv(model_matrix_uniform,false,mvMatrix);
-    gl.uniformMatrix4fv(perspective_matrix_uniform,false,pMatrix);
-}
-
-function sq(x)
-{return (x)*(x);}
 
 function loadShapes(desc = ""){
         var inputEllipsoids = getJSONFile(INPUT_ELLIPSOIDS_URL,"ellipsoids");
@@ -344,7 +322,7 @@ function loadShapes(desc = ""){
             var indexOffset = vec3.create(); // the index offset for the current set
             var triToAdd = vec3.create(); // tri indices to add to the index array
 
-            triBufferSize = 0;
+            triBufferSize[shapeIndex] = 0;
         
             vec3.set(indexOffset,0,0,0); // update vertex offset
             
@@ -356,14 +334,28 @@ function loadShapes(desc = ""){
             currentEllipsoid.normals = [];
 
             console.log("Shape index",shapeIndex," spec :",currentEllipsoid.n)
-            gl.uniform1f(specularIndex, currentEllipsoid.n);
+           
+
+
             var ambient_color_array = [currentEllipsoid.ambient[0],currentEllipsoid.ambient[1],currentEllipsoid.ambient[2],1] ;
             var diffuse_color_array = [currentEllipsoid.diffuse[0],currentEllipsoid.diffuse[1],currentEllipsoid.diffuse[2],1] ;
             var specular_color_array = [currentEllipsoid.specular[0],currentEllipsoid.specular[1],currentEllipsoid.specular[2],1] ; 
 
-            gl.uniform4fv(vertexColorAttrib_a , ambient_color_array);
-            gl.uniform4fv(vertexColorAttrib_d , diffuse_color_array);
-            gl.uniform4fv(vertexColorAttrib_s , specular_color_array);
+
+
+             var property = {
+                ambient : ambient_color_array,
+                diffuse : diffuse_color_array,
+                specular : specular_color_array,
+                n : currentEllipsoid.n,
+                center : [currentEllipsoid.x,currentEllipsoid.y,currentEllipsoid.z]
+
+             }
+
+            shapeProperties[shapeIndex] = property;
+           
+
+            
 
                
             for (var latNumber = 0; latNumber <= globals.ellipsoids.latitudeBands; latNumber++) {
@@ -464,13 +456,15 @@ function loadShapes(desc = ""){
                 globals.array4buffers.indexArray.push(triToAdd[0],triToAdd[1],triToAdd[2]);
             } // end for triangles in set
 
-            triBufferSize += currentEllipsoid.triangles.length; // total number of tris
+            triBufferSize[shapeIndex] += currentEllipsoid.triangles.length; // total number of tris
 
-             triBufferSize *= 3;
+             triBufferSize[shapeIndex] *= 3;
             console.log("shapeIndex : "+shapeIndex)
-            shapeIndex+=1;
+           
             settingBuffers(shapeIndex);
             renderShape(shapeIndex);
+            ellipsoidIndices.push(shapeIndex);
+            shapeIndex+=1;
 
 
 
@@ -495,7 +489,7 @@ function loadShapes(desc = ""){
 
             var indexOffset = vec3.create(); // the index offset for the current set
             var triToAdd = vec3.create(); // tri indices to add to the index array
-            triBufferSize = 0
+            triBufferSize[shapeIndex] = 0
 
             /////////////////
 
@@ -511,12 +505,22 @@ function loadShapes(desc = ""){
             var ambient_color_array = [ambient_color[0],ambient_color[1],ambient_color[2],1] ;
             var diffuse_color_array = [diffuse_color[0],diffuse_color[1],diffuse_color[2],1] ;
             var specular_color_array = [specular_color[0],specular_color[1],specular_color[2],1] ; 
-            
-            gl.uniform4fv( vertexColorAttrib_a , ambient_color_array);
-            gl.uniform4fv( vertexColorAttrib_d , diffuse_color_array);
-            gl.uniform4fv( vertexColorAttrib_s , specular_color_array);
 
-            gl.uniform1f(specularIndex, currentTriangle.n);
+            var centerx = (currentTriangle.vertices[0][0] + currentTriangle.vertices[1][0] + currentTriangle.vertices[2][0] ) /3;
+            var centery = (currentTriangle.vertices[0][1] + currentTriangle.vertices[1][1] + currentTriangle.vertices[2][1] ) /3;
+            var centerz = (currentTriangle.vertices[0][2] + currentTriangle.vertices[1][2] + currentTriangle.vertices[2][2] ) /3;
+
+
+             var property = {
+                ambient : ambient_color_array,
+                diffuse : diffuse_color_array,
+                specular : specular_color_array,
+                n : currentTriangle.material.n,
+                center : [centerx,centery,centerz]
+
+             }
+
+            shapeProperties[shapeIndex] = property;
 
             for (var normalIndex = 0; normalIndex <  currentTriangle.normals.length ; normalIndex++) {
 
@@ -538,15 +542,17 @@ function loadShapes(desc = ""){
                 globals.array4buffers.indexArray.push(triToAdd[0],triToAdd[1],triToAdd[2]);
             } // end for triangles in set
 
-            triBufferSize += currentTriangle.triangles.length; // total number of tris
+            triBufferSize[shapeIndex] += currentTriangle.triangles.length; // total number of tris
             ////////////////////////////////////////////////////////////////////////////////////
 
 
-          triBufferSize *= 3; // now total number of indices
+          triBufferSize[shapeIndex] *= 3; // now total number of indices
        
-         shapeIndex+=1;  
+           
          settingBuffers(shapeIndex)
          renderShape(shapeIndex);
+         triangleIndices.push(shapeIndex);
+         shapeIndex+=1;
         }  // end of trianlgles
         console.log("no of shapes ",shapeIndex)
 
@@ -560,6 +566,11 @@ function loadShapes(desc = ""){
      
 
 } 
+
+
+
+
+
 
 function settingBuffers(index){
 
@@ -588,6 +599,8 @@ function settingBuffers(index){
 // render the loaded model
 function renderShape(index) {
 
+    // gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); // clear frame/depth buffers
+
     // vertex buffer: activate and feed into vertex shader
     gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffer[index]); // activate
     gl.vertexAttribPointer(vertexPositionAttrib,3,gl.FLOAT,false,0,0); // feed
@@ -600,13 +613,159 @@ function renderShape(index) {
     // triangle buffer: activate and render
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, triangleBuffer[index]); // activate
 
-    setUniformMatrices();
-    gl.drawElements(gl.TRIANGLES,triBufferSize,gl.UNSIGNED_SHORT,0); // render
+    setUniformMatrices(index);
+    gl.drawElements(gl.TRIANGLES,triBufferSize[index],gl.UNSIGNED_SHORT,0); // render
 } // end render triangles
 
 
-function settingUpEvents(){
 
+function clearCache(){
+
+        globals.array4buffers.coordArray = [];
+        globals.array4buffers.indexArray = [];
+        globals.array4buffers.normalArray = [];
+      
+        resetMolelMatrices(shapeIndex);
+        pMatrix[shapeIndex] = mat4.create();
+        mat4.perspective(pMatrix[shapeIndex],Math.PI/2,1,0.1,1000);
+
+}
+
+
+function setUniformMatricesAll(){
+   
+   for(var index = 0 ; index < shapeIndex ; index++){
+      setUniformMatrices(index)
+}
+}
+
+function setUniformMatrices(index){
+   
+    gl.uniformMatrix4fv(model_matrix_uniform,false,mvMatrix[index]);
+    console.log("set uniforms perspective : "+pMatrix[index])
+    gl.uniformMatrix4fv(perspective_matrix_uniform,false,pMatrix[index]);
+
+    gl.uniform4fv(vertexColorAttrib_a , shapeProperties[index].ambient);
+    gl.uniform4fv(vertexColorAttrib_d , shapeProperties[index].diffuse);
+    gl.uniform4fv(vertexColorAttrib_s , shapeProperties[index].specular);
+    gl.uniform1f(specularIndex, shapeProperties[index].n);
+
+}
+
+function sq(x)
+{return (x)*(x);}
+
+
+
+
+
+
+
+
+
+function settingUpEvents(keyCode){
+   var charPressed = String.fromCharCode(keyCode);
+   console.log(keyCode +" "+ charPressed)
+
+   /*Highlighting Part Keys 4 6(triangles) 8 9 (ellipsoids) */
+   if(charPressed == '4' || charPressed == '6'){
+        resetModelMatricesAll();
+        
+        if(charPressed == '6')
+        highlightTriangleIndex = (highlightTriangleIndex + 1) %triangleIndices.length;
+        else
+        {
+           highlightTriangleIndex =  (highlightTriangleIndex == 0) ? triangleIndices.length -1 : highlightTriangleIndex -1;
+        }
+        var index = triangleIndices[highlightTriangleIndex];
+        currentHighlightedObject = index;
+        setHighlightMatrix(index);
+
+       
+
+   }
+    if(charPressed == '8' || charPressed == '2'){
+        resetModelMatricesAll();
+      
+         if(charPressed == '8')
+        highlightEllipsoidIndex = (highlightEllipsoidIndex + 1)%ellipsoidIndices.length;
+        else
+        {
+           highlightEllipsoidIndex =  (highlightEllipsoidIndex == 0) ? ellipsoidIndices.length -1 : highlightEllipsoidIndex -1;
+        }
+
+        var index = ellipsoidIndices[highlightEllipsoidIndex];
+        currentHighlightedObject = index;
+        setHighlightMatrix(index);
+
+       
+   }
+
+   if(charPressed == ' ')
+   {
+     resetModelMatricesAll();
+    
+   }
+
+  
+   renderAll();
+
+}
+
+function resetMolelMatrices(index)
+{
+    mvMatrix[index] = mat4.create();
+    mat4.lookAt(mvMatrix[index],eyePos,lookAtVals,lookUpVals);
+}
+
+function resetModelMatricesAll()
+{
+    for(var index=0;index < noOfShapes ; index++)
+    {
+        resetMolelMatrices(index);
+    }
+}
+
+
+
+function setHighlightMatrix(index){
+    console.log("highlight mv : ",mvMatrix[index])
+    var s = shapeProperties[index];
+
+    console.log("shape property : "+s.center)
+    mat4.translate(mvMatrix[index],mvMatrix[index], vec3.fromValues(s.center[0],s.center[1],s.center[2])  )
+    mat4.scale(mvMatrix[index],mvMatrix[index],vec3.fromValues(1.2,1.2,1.2));
+    mat4.translate(mvMatrix[index],mvMatrix[index], vec3.fromValues(-s.center[0],-s.center[1],-s.center[2])  )
+
+}
+
+
+
+$(function(){
+
+$(window).keypress(function (e) {
+    //use e.which
+    var keyCode = e.which;
+    settingUpEvents(keyCode);
+
+
+
+});
+
+
+    
+});
+
+
+function renderAll(){
+    gl.clearColor(0.0, 0.0, 0.0, 1.0); // use black when we clear the frame buffer
+    gl.clearDepth(1.0); // use max when we clear the depth buffer
+    gl.enable(gl.DEPTH_TEST); // use black when we clear the frame buffer
+
+for(var i=0; i<noOfShapes ; i++)
+{
+    renderShape(i);
+}
 
 }
 
