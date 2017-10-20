@@ -8,7 +8,7 @@ const WIN_BOTTOM = 0; const WIN_TOP = 1;  // default top and bottom y coords in 
 //const INPUT_SPHERES_URL = "https://ncsucgclass.github.io/prog2/ellipsoids.json"; // ellipsoids file loc
 
 const INPUT_ELLIPSOIDS_URL = "https://ncsucgclass.github.io/prog2/ellipsoids.json"
-const INPUT_TRIANGLES_URL  ="https://demo2448912.mockable.io"
+const INPUT_TRIANGLES_URL  ="https://ncsucgclass.github.io/prog2/triangles.json"
 // default eye position in world space
 
 /* webgl globals */
@@ -695,7 +695,7 @@ function sq(x)
 
 function settingUpEvents(keyCode){
    var charPressed = String.fromCharCode(keyCode);
-   console.log(keyCode +" "+ charPressed)
+  console.log(keyCode +" "+ charPressed)
 
    /*Highlighting Part Keys 4 6(triangles) 8 9 (ellipsoids) */
    if(charPressed == 'c' || charPressed == 'v'){
@@ -754,8 +754,190 @@ function settingUpEvents(keyCode){
     changeColor(charPressed);
     }
 
+     if(charPressed == 'A' ||charPressed == 'D'||charPressed == 'E'||charPressed == 'Q'||charPressed == 'W'||charPressed == 'S')
+    { 
+    changeViewRotate(charPressed);
+    }
+
+    if(charPressed == 'a' ||charPressed == 'd'||charPressed == 'e'||charPressed == 'q'||charPressed == 'w'||charPressed == 's')
+    { 
+    changeView(charPressed);
+    }
+
+
+     if(charPressed == 'k' ||charPressed == ';'||charPressed == 'o'||charPressed == 'l'||charPressed == 'i'||charPressed == 'p')
+    { 
+    changeTransform(charPressed);
+    }
+
+    if(charPressed == 'K' ||charPressed == ':'||charPressed == 'O'||charPressed == 'L'||charPressed == 'I'||charPressed == 'P')
+    { 
+    changeRotation(charPressed);
+    }
+
+
+
    renderAll();
 
+}
+
+function changeRotation(selection)
+{
+
+    if(currentHighlightedObject == -1)
+    return;
+
+    var s = shapeProperties[currentHighlightedObject];
+    var delta = 1;
+    var rotationVector = [0,0,0];
+
+    if(selection == 'K')
+    {
+        rotationVector = [0,1,0];
+    }
+    //x
+    if(selection == ':')
+    {
+        rotationVector = [0,1,0];
+        delta = -1;
+    }
+    //y
+    if(selection == 'O')
+     {   
+         rotationVector = [1,0,0];
+    }
+    //y
+    if(selection == 'L')
+     { 
+       rotationVector = [1,0,0];
+       delta = -1;
+   }
+    //z
+    if(selection == 'I')
+       { 
+        rotationVector = [0,0,1];
+    }
+    //z
+    if(selection == 'P')
+       { 
+        rotationVector = [0,0,1];
+        delta = -1;
+       }
+
+         mat4.translate(mvMatrix[currentHighlightedObject],mvMatrix[currentHighlightedObject], vec3.fromValues(s.center[0],s.center[1],s.center[2])  )
+   
+    
+    var rotateMatrix = mat4.fromRotation(mat4.create(),delta * Math.PI * 10/180,vec3.fromValues(rotationVector[0],rotationVector[1],rotationVector[2]))
+    mat4.multiply(mvMatrix[currentHighlightedObject],mvMatrix[currentHighlightedObject],rotateMatrix);
+
+  
+  mat4.translate(mvMatrix[currentHighlightedObject],mvMatrix[currentHighlightedObject], vec3.fromValues(-s.center[0],-s.center[1],-s.center[2])  )
+
+
+
+}
+
+
+function changeTransform(selection)
+{
+
+    if(currentHighlightedObject == -1)
+    return;
+
+    var translateVector = [0,0,0];
+
+    if(selection == 'k')
+        translateVector = [0.1,0,0]
+    //x
+    if(selection == ';')
+        translateVector = [-0.1,0,0]
+
+    //y
+    if(selection == 'o')
+        translateVector = [0,0,0.1]
+    //y
+    if(selection == 'l')
+        translateVector = [0,0,-0.1]
+    //z
+    if(selection == 'i')
+        translateVector = [0,0.1,0]
+    //z
+    if(selection == 'p')
+        translateVector = [0,-0.1,0]
+
+
+     mat4.translate(mvMatrix[currentHighlightedObject],mvMatrix[currentHighlightedObject], vec3.fromValues(translateVector[0],translateVector[1],translateVector[2])  )
+
+
+    
+
+
+}
+
+
+
+
+
+function changeView(selection){
+
+    var delta = 0.1;
+    //x
+    if(selection == 'a')
+        eyePos[0] -=delta;
+    //x
+    if(selection == 'd')
+        eyePos[0] +=delta;
+
+    //y
+    if(selection == 'e')
+        eyePos[1] -=delta;
+    //y
+    if(selection == 'q')
+        eyePos[1] +=delta;
+
+      //z
+    if(selection == 'w')
+        eyePos[2] -=delta;
+    //z
+    if(selection == 's')
+        eyePos[2] +=delta;
+    
+
+    for(var index=0;index < noOfShapes ; index++)
+    {
+    mat4.lookAt(mvMatrix[index],eyePos,lookAtVals,lookUpVals);
+    }
+}
+
+function changeViewRotate(selection){
+
+    var delta = 0.1;
+    //x
+    if(selection == 'A')
+        lookAtVals[0] -=delta;
+    //x
+    if(selection == 'D')
+        lookAtVals[0] +=delta;
+
+    //y
+    if(selection == 'E')
+        lookAtVals[1] -=delta;
+    //y
+    if(selection == 'Q')
+        lookAtVals[1] +=delta;
+
+      //z
+    if(selection == 'W')
+        lookAtVals[2] -=delta;
+    //z
+    if(selection == 'S')
+        lookAtVals[2] +=delta;
+    
+
+    for(var index=0;index < noOfShapes ; index++)
+    {
+    mat4.lookAt(mvMatrix[index],eyePos,lookAtVals,lookUpVals);
+    }
 }
 
 
@@ -834,6 +1016,9 @@ function setHighlightMatrix(index){
     mat4.translate(mvMatrix[index],mvMatrix[index], vec3.fromValues(-s.center[0],-s.center[1],-s.center[2])  )
 
 }
+
+
+
 
 
 
